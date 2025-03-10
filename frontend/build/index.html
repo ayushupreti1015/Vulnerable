@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Application Vulnerability Scanner</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 80px; /* Add padding for sticky progress bar */
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            font-weight: bold;
+        }
+        .severity-high {
+            color: #dc3545;
+        }
+        .severity-medium {
+            color: #fd7e14;
+        }
+        .severity-low {
+            color: #ffc107;
+        }
+        .nav-tabs .nav-link.active {
+            font-weight: bold;
+        }
+        .scan-history-item {
+            cursor: pointer;
+        }
+        .scan-history-item:hover {
+            background-color: #f1f1f1;
+        }
+        .dashboard-stats {
+            text-align: center;
+            padding: 20px 0;
+        }
+        .stat-card {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            color: white;
+        }
+        .bg-purple {
+            background-color: #6f42c1;
+        }
+        .bg-blue {
+            background-color: #0d6efd;
+        }
+        .bg-orange {
+            background-color: #fd7e14;
+        }
+        .bg-red {
+            background-color: #dc3545;
+        }
+        #scanProgress {
+            display: none;
+            margin-top: 20px;
+        }
+        .vuln-evidence {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .spinner-border {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+        }
+        /* Sticky progress bar styles */
+        #stickyProgress {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 0;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        .sticky-progress-bar {
+            height: 6px;
+            border-radius: 0;
+        }
+        .vulnerability-counter {
+            text-align: center;
+            padding: 5px;
+            border-radius: 4px;
+            margin: 0 5px;
+            min-width: 40px;
+            display: inline-block;
+        }
+        .vulnerability-counter.high {
+            background-color: #dc3545;
+        }
+        .vulnerability-counter.medium {
+            background-color: #fd7e14;
+        }
+        .vulnerability-counter.low {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .vulnerability-counter.total {
+            background-color: #6f42c1;
+        }
+        /* Control buttons styling */
+        .scan-control-buttons {
+            margin-top: 10px;
+        }
+        #pauseResumeBtn, #cancelScanBtn {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="pb-3 mb-4 border-bottom">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-shield-alt fs-2 me-3 text-primary"></i>
+                <span class="fs-4">Web Application Vulnerability Scanner</span>
+            </div>
+        </header>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-search me-2"></i> Start New Scan
+                    </div>
+                    <div class="card-body">
+                        <form id="scanForm">
+                            <div class="mb-3">
+                                <label for="url" class="form-label">Target URL</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-globe"></i></span>
+                                    <input type="url" class="form-control" id="url" placeholder="https://example.com" required>
+                                </div>
+                                <div class="form-text">Enter the full URL including the protocol (http:// or https://)</div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="depth" class="form-label">Crawl Depth</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-level-down-alt"></i></span>
+                                            <input type="number" class="form-control" id="depth" min="1" max="5" value="2">
+                                        </div>
+                                        <div class="form-text">How many levels of links to follow (1-5)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="threads" class="form-label">Threads</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-sitemap"></i></span>
+                                            <input type="number" class="form-control" id="threads" min="1" max="10" value="5">
+                                        </div>
+                                        <div class="form-text">Number of concurrent threads (1-10)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="timeout" class="form-label">Timeout</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                                            <input type="number" class="form-control" id="timeout" min="5" max="60" value="10">
+                                        </div>
+                                        <div class="form-text">Request timeout in seconds (5-60)</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-play me-2"></i>Start Scan
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="scanProgress" class="mt-4">
+                            <div class="alert alert-info">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="spinner-border text-info me-3" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <div>
+                                        <h5 class="mb-1" id="scanStatus">Initializing scan...</h5>
+                                        <div id="scanProgressDetails">Preparing to scan...</div>
+                                    </div>
+                                </div>
+                                <div class="progress mt-2">
+                                    <div id="scanProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 0%" 
+                                         aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="scan-control-buttons mt-3 text-end">
+                                    <button id="pauseResumeBtn" class="btn btn-warning">
+                                        <i class="fas fa-pause me-2"></i>Pause
+                                    </button>
+                                    <button id="cancelScanBtn" class="btn btn-danger ms-2">
+                                        <i class="fas fa-times me-2"></i>Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab" aria-controls="dashboard" aria-selected="true">
+                    <i class="fas fa-chart-bar me-2"></i>Dashboard
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="vulnerabilities-tab" data-bs-toggle="tab" data-bs-target="#vulnerabilities" type="button" role="tab" aria-controls="vulnerabilities" aria-selected="false">
+                    <i class="fas fa-bug me-2"></i>Vulnerabilities
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab" aria-controls="history" aria-selected="false">
+                    <i class="fas fa-history me-2"></i>Scan History
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabsContent">
+            <!-- Dashboard Tab -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel" aria-labelledby="dashboard-tab">
+                <div class="row dashboard-stats">
+                    <div class="col-md-3">
+                        <div class="stat-card bg-blue">
+                            <h2 id="totalScans">0</h2>
+                            <div>Total Scans</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-red">
+                            <h2 id="highVulnerabilities">0</h2>
+                            <div>High Severity</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-orange">
+                            <h2 id="mediumVulnerabilities">0</h2>
+                            <div>Medium Severity</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-purple">
+                            <h2 id="totalVulnerabilities">0</h2>
+                            <div>Total Vulnerabilities</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-chart-pie me-2"></i>Vulnerability Distribution
+                            </div>
+                            <div class="card-body">
+                                <canvas id="vulnerabilityTypeChart" height="250"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Severity Distribution
+                            </div>
+                            <div class="card-body">
+                                <canvas id="severityChart" height="250"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header bg-light">
+                        <i class="fas fa-exclamation-circle me-2"></i>Recent Vulnerabilities
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>URL</th>
+                                        <th>Severity</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentVulnerabilitiesTable">
+                                    <tr>
+                                        <td colspan="4" class="text-center">No vulnerabilities found yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vulnerabilities Tab -->
+            <div class="tab-pane fade" id="vulnerabilities" role="tabpanel" aria-labelledby="vulnerabilities-tab">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-bug me-2"></i>Vulnerabilities</span>
+                            <div class="d-flex">
+                                <div class="input-group">
+                                    <input type="text" class="form-control form-control-sm" id="vulnerabilitySearch" placeholder="Search...">
+                                    <button class="btn btn-sm btn-outline-secondary" type="button">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary ms-2" id="exportCsvBtn">
+                                    <i class="fas fa-download me-1"></i> Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>URL</th>
+                                        <th>Severity</th>
+                                        <th>Description</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vulnerabilitiesTable">
+                                    <tr>
+                                        <td colspan="5" class="text-center">No vulnerabilities found yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-pane fade" id="history" role="tabpanel" aria-labelledby="history-tab">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <i class="fas fa-history me-2"></i>Scan History
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Target URL</th>
+                                        <th>Status</th>
+                                        <th>Vulnerabilities</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scanHistoryTable">
+                                    <tr>
+                                        <td colspan="5" class="text-center">No scan history available</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sticky Progress Bar -->
+    <div id="stickyProgress">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-5">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm text-light me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div>
+                            <div class="fw-bold" id="stickyScanStatus">Scanning...</div>
+                            <div class="small text-truncate" id="stickyScanUrl"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="progress sticky-progress-bar">
+                        <div id="stickyProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                             role="progressbar" style="width: 0%" 
+                             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div class="text-center small mt-1">
+                        <span id="stickyProgressPercent">0%</span> Complete
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex justify-content-end align-items-center">
+                        <div>
+                            <div class="vulnerability-counter high" title="High Severity">
+                                <span id="stickyHighCount">0</span>
+                            </div>
+                            <div class="vulnerability-counter medium" title="Medium Severity">
+                                <span id="stickyMediumCount">0</span>
+                            </div>
+                            <div class="vulnerability-counter low" title="Low Severity">
+                                <span id="stickyLowCount">0</span>
+                            </div>
+                            <div class="vulnerability-counter total" title="Total Vulnerabilities">
+                                <span id="stickyTotalCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vulnerability Detail Modal -->
+    <div class="modal fade" id="vulnerabilityDetailModal" tabindex="-1" aria-labelledby="vulnerabilityDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="vulnerabilityDetailModalLabel">Vulnerability Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h5 id="vulnType"></h5>
+                        <div class="badge" id="vulnSeverity"></div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>URL:</h6>
+                        <div id="vulnUrl" class="text-break"></div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Description:</h6>
+                        <div id="vulnDescription"></div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Evidence:</h6>
+                        <div id="vulnEvidence" class="vuln-evidence"></div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Recommendation:</h6>
+                        <div id="vulnRecommendation"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
